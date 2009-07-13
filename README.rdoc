@@ -1,7 +1,0 @@
-= peeping
-
-Description goes here.
-
-== Copyright
-
-Copyright (c) 2009 Ruben Medellin. See LICENSE for details.
