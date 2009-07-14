@@ -79,14 +79,15 @@ describe Peep, "when calling hook methods" do
 
   it "should always override instance method calls with singleton method calls" do
     scooby = Dog.new('scooby')
-    Peep.hook_object!(
-            scooby,
-            :lick_owner,
-            :before => Proc.new{|object, *args| object.owner = "Shaggy" },
-            :after  => Proc.new{|object, result| result.should == "Shaggy is now all wet!" } )
     lassie = Dog.new('lassie')
+    
     Peep.hook_instances!(
             Dog,
+            :lick_owner,
+            :before => Proc.new{|object, *args|   object.owner = "Shaggy" },
+            :after  => Proc.new{|object, result|  result.should == "Shaggy is now all wet!" } )
+    Peep.hook_object!(
+            lassie,
             :lick_owner,
             :after => Proc.new{|objetc, result| result.should == "I have no owner to lick :(" } )
     scooby.lick_owner
