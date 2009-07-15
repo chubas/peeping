@@ -6,7 +6,6 @@
 # License::   Distributes under the same terms as Ruby
 
 require 'peeping/util'
-require 'peeping/hook'
 require 'peeping/exceptions'
 
 require 'peeping/hooks/class_hooks'
