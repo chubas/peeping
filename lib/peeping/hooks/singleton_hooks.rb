@@ -55,7 +55,7 @@ module Peeping
           if SINGLETON_METHOD_HOOKS[object].has_key?(hooked_method)
             raise AlreadyDefinedHookException.new("Hook signature present for #{hooked_method} in #{object.metaclass}")
           end
-          if object.respond_to?(hooked_method_name)
+          if object.metaclass.method_defined?(hooked_method_name)
             raise AlreadyDefinedHookException.new("Method #{hooked_method_name} hook already defined for #{hooked_method} in #{where_to_eval}")
           end
 
@@ -66,12 +66,23 @@ module Peeping
           end
 
           hook_key = 'self'
-          before_hook_call = if hooks.include?(:before)
-            "Peeping::Peep.hooked_singleton_methods_for(#{hook_key})[:\"#{hooked_method}\"][:before].call(self, *args)"
-          end
-          after_hook_call = if hooks.include?(:after)
-            "Peeping::Peep.hooked_singleton_methods_for(#{hook_key})[:\"#{hooked_method}\"][:after].call(self, proxied_result)"
-          end
+          before_hook_call = <<-BEFORE_HOOK_CALL
+
+            before_hook_callback = Peeping::Peep.hooked_singleton_methods_for(#{hook_key})[:"#{hooked_method}"][:before]
+            instance_before_hook_callback = ((Peeping::Peep.hooked_instance_methods_for(self.class) || {})[:"#{hooked_method}"] || {})[:before]
+
+            before_hook_callback ||= instance_before_hook_callback                      
+            before_hook_callback.call(self, *args) if before_hook_callback
+          BEFORE_HOOK_CALL
+
+          after_hook_call = <<-AFTER_HOOK_CALL
+            after_hook_callback = Peeping::Peep.hooked_singleton_methods_for(#{hook_key})[:"#{hooked_method}"][:after]
+            instance_after_hook_callback = ((Peeping::Peep.hooked_instance_methods_for(self.class) || {})[:"#{hooked_method}"] || {})[:after]
+
+            after_hook_callback ||= instance_after_hook_callback  
+            after_hook_callback.call(self, proxied_result) if after_hook_callback
+          AFTER_HOOK_CALL
+
           should_override_instance_call = true # TODO: Optionalize
           class_eval_call = Proc.new do
             eval <<-REDEF
@@ -97,16 +108,34 @@ module Peeping
       end
 
       # Removes hook singleton methods as well as returns the hooked methods to their original definition
-      def unhook_object!(object)
-        object.metaclass.class_eval do
-          instance_methods.grep(/^__proxied_singleton_method_/).each do |proxied_method|
-            proxied_method =~ (/^__proxied_singleton_method_(.*)$/)
-            original = $1
-            eval "alias #{original} #{proxied_method}"
-            eval "undef #{proxied_method}"
+      def unhook_object!(object, methods = :all, hooks = :all)
+        methods = (methods == :all) ? SINGLETON_METHOD_HOOKS[object].keys : (methods.is_a?(Symbol) ? [methods] : methods)
+        raise ArgumentError("Valid arguments: :before, :after or :all") unless [:before, :after, :all].include?(hooks)
+
+        # Validate all methods exist before doing anything
+        methods.each do |method|
+          raise UndefinedHookException.new("No hook defined for class method #{method})") unless SINGLETON_METHOD_HOOKS[object][method]
+        end
+
+        methods.each do |method|
+          if hooks == :all
+            x = <<-REDEF_OLD_METHOD
+              alias :"#{method}" :"#{SINGLETON_HOOK_METHOD_PREFIX}#{method}"
+              undef :"#{SINGLETON_HOOK_METHOD_PREFIX}#{method}"
+            REDEF_OLD_METHOD
+            puts x
+            object.metaclass.class_eval x
+            SINGLETON_METHOD_HOOKS[object].delete(method)
+          else
+            unless SINGLETON_METHOD_HOOKS[object][method][hooks]
+              raise UndefinedHookException.new("No hook defined for singleton method #{method}) at #{hooks.inspect}")
+            end
+            SINGLETON_METHOD_HOOKS[object][method].delete(hooks)
+            SINGLETON_METHOD_HOOKS[object].delete(method) if SINGLETON_METHOD_HOOKS[object][method].empty?
           end
         end
-        SINGLETON_METHOD_HOOKS.delete(object)
+
+        SINGLETON_METHOD_HOOKS.delete(object) if methods == :all or (SINGLETON_METHOD_HOOKS[object] || {}).empty?
       end
 
       def clear_all_singleton_hooks!

@@ -22,7 +22,7 @@ module Peeping
 
       # Returns true if hooks given for class methods of the class +klass+ exist
       def is_class_hooked?(klass)
-        CLASS_METHOD_HOOKS.has_key?(klass)
+        CLASS_METHOD_HOOKS.has_key?(klass) and not CLASS_METHOD_HOOKS[klass].empty?
       end
 
       # Returns a hash containing all hooked methods for class +klass+ as keys, or an empty hash if don't exist
@@ -56,7 +56,7 @@ module Peeping
           if CLASS_METHOD_HOOKS[klass].has_key?(hooked_method)
             raise AlreadyDefinedHookException.new("Hook signature present for #{hooked_method} in #{klass.metaclass}")
           end
-          if klass.respond_to?(new_hooked_method_name)
+          if klass.metaclass.method_defined?(new_hooked_method_name)
             raise AlreadyDefinedHookException.new("Method #{new_hooked_method_name} hook already defined for #{hooked_method} in #{klass.metaclass}")
           end
 
@@ -67,12 +67,16 @@ module Peeping
           end
 
           hook_key = klass.name
-          before_hook_call = if hooks.include?(:before)
-            "Peeping::Peep.hooked_class_methods_for(#{hook_key})[:\"#{hooked_method}\"][:before].call(self, *args)"
-          end
-          after_hook_call = if hooks.include?(:after)
-            "Peeping::Peep.hooked_class_methods_for(#{hook_key})[:\"#{hooked_method}\"][:after].call(self, proxied_result)"
-          end
+          before_hook_call = <<-BEFORE_HOOK_CALL
+            before_hook_callback = Peeping::Peep.hooked_class_methods_for(#{hook_key})[:"#{hooked_method}"][:before]
+            before_hook_callback.call(self, *args) if before_hook_callback
+          BEFORE_HOOK_CALL
+
+          after_hook_call = <<-AFTER_HOOK_CALL
+            after_hook_callback = Peeping::Peep.hooked_class_methods_for(#{hook_key})[:"#{hooked_method}"][:after]
+            after_hook_callback.call(self, proxied_result) if after_hook_callback
+          AFTER_HOOK_CALL
+
           class_eval_call = Proc.new do
             eval <<-REDEF
               alias :"#{new_hooked_method_name}" :"#{hooked_method}"
@@ -93,16 +97,33 @@ module Peeping
       end
 
       # Removes hook class methods as well as returns the hooked methods to their original definition
-      def unhook_class!(klass)
-        klass.metaclass.class_eval do
-          instance_methods.grep(/^#{CLASS_HOOK_METHOD_PREFIX}/).each do |proxied_method|
-            proxied_method =~ (/^#{CLASS_HOOK_METHOD_PREFIX}(.*)$/)
-            original = $1
-            eval "alias #{original} #{proxied_method}"
-            eval "undef #{proxied_method}"
+      def unhook_class!(klass, methods = :all, hooks = :all)
+        methods = (methods == :all) ? CLASS_METHOD_HOOKS[klass].keys : (methods.is_a?(Symbol) ? [methods] : methods)
+        raise ArgumentError("Valid arguments: :before, :after or :all") unless [:before, :after, :all].include?(hooks)
+
+        # Validate all methods exist before doing anything 
+        methods.each do |method|
+          raise UndefinedHookException.new("No hook defined for class method #{method})") unless CLASS_METHOD_HOOKS[klass][method]
+        end
+
+        methods.each do |method|
+          if hooks == :all
+            klass.metaclass.class_eval <<-REDEF_OLD_METHOD
+              alias :"#{method}" :"#{CLASS_HOOK_METHOD_PREFIX}#{method}"
+              undef :"#{CLASS_HOOK_METHOD_PREFIX}#{method}"
+            REDEF_OLD_METHOD
+            CLASS_METHOD_HOOKS[klass].delete(method)
+          else
+            unless CLASS_METHOD_HOOKS[klass][method][hooks]
+              raise UndefinedHookException.new("No hook defined for class method #{method}) at #{hooks.inspect}")
+            end
+            CLASS_METHOD_HOOKS[klass][method].delete(hooks)
+            CLASS_METHOD_HOOKS[klass].delete(method) if CLASS_METHOD_HOOKS[klass][method].empty?
           end
         end
-        CLASS_METHOD_HOOKS.delete(klass)
+
+        CLASS_METHOD_HOOKS.delete(klass) if methods == :all or (CLASS_METHOD_HOOKS[klass] || {}).empty?
+
       end
 
       def clear_all_class_hooks!

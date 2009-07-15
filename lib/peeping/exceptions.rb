@@ -3,4 +3,5 @@ module Peeping
   class UndefinedMethodException    < Exception; end
   class NotAClassException          < Exception; end
   class AlreadyDefinedHookException < Exception; end
+  class UndefinedHookException      < Exception; end
 end

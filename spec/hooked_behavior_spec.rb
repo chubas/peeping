@@ -81,15 +81,15 @@ describe Peep, "when calling hook methods" do
     scooby = Dog.new('scooby')
     lassie = Dog.new('lassie')
     
-    Peep.hook_instances!(
-            Dog,
+    Peep.hook_object!(
+            scooby,
             :lick_owner,
             :before => Proc.new{|object, *args|   object.owner = "Shaggy" },
             :after  => Proc.new{|object, result|  result.should == "Shaggy is now all wet!" } )
-    Peep.hook_object!(
-            lassie,
+    Peep.hook_instances!(
+            Dog,
             :lick_owner,
-            :after => Proc.new{|objetc, result| result.should == "I have no owner to lick :(" } )
+            :after  => Proc.new{|objetc, result| result.should == "I have no owner to lick :(" } )
     scooby.lick_owner
     lassie.lick_owner
   end

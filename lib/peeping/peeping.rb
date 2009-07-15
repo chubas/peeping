@@ -23,18 +23,19 @@ module Peeping
     include ClassMethodHooks
     include InstanceMethodHooks
     include SingletonMethodHooks
-    
-  end
 
-  ## ========== Auxiliar methods ==========
+    #--
+    #===== GLOBAL FUNCTIONS =====
+    #++
 
-  class Peep
     # Completely removes all hooks for all defined classes and objects
     def self.clear_all_hooks!
-      clear_all_class_hooks!
       clear_all_singleton_hooks!
       clear_all_instance_hooks!
+      clear_all_class_hooks!
     end
-  end    
+
+  end
+
 end
 

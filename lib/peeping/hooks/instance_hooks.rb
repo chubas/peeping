@@ -38,12 +38,10 @@ module Peeping
       def hook_instances!(klass, hooked_methods, hooks)
         hooked_methods = [hooked_methods] if hooked_methods.is_a? Symbol
 
-        validate_hooks(hooks)                     # Validate hooks
-        validate_is_class(klass)                   # Validate class
-
-        hooked_methods.each do |hooked_method|    # Validate methods defined
-          validate_has_method_defined(klass, hooked_method)
-        end
+        #=== Validations ===
+        validate_hooks(hooks)
+        validate_is_class(klass)
+        hooked_methods.each { |hooked_method| validate_has_method_defined(klass, hooked_method) }
 
         hooked_methods.each do |hooked_method|
           INSTANCE_METHOD_HOOKS[klass] ||= {}
@@ -52,8 +50,8 @@ module Peeping
           if INSTANCE_METHOD_HOOKS[klass].has_key?(hooked_method)
             raise AlreadyDefinedHookException.new("Hook signature present for #{hooked_method} in #{klass}")
           end
-          if klass.respond_to?(hooked_method_name)
-            raise AlreadyDefinedHookException.new("Method #{hooked_method_name} hook already defined for #{hooked_method} in #{where_to_eval}")
+          if klass.method_defined?(hooked_method_name)
+            raise AlreadyDefinedHookException.new("Method #{hooked_method_name} hook already defined for #{hooked_method} in #{klass}")
           end
 
           INSTANCE_METHOD_HOOKS[klass][hooked_method] = {}
@@ -63,12 +61,16 @@ module Peeping
           end
 
           hook_key = klass.name
-          before_hook_call = if hooks.include?(:before)
-            "Peeping::Peep.hooked_instance_methods_for(#{hook_key})[:\"#{hooked_method}\"][:before].call(self, *args)"
-          end
-          after_hook_call = if hooks.include?(:after)
-            "Peeping::Peep.hooked_instance_methods_for(#{hook_key})[:\"#{hooked_method}\"][:after].call(self, proxied_result)"
-          end
+          before_hook_call = <<-BEFORE_HOOK_CALL
+            before_hook_callback = Peeping::Peep.hooked_instance_methods_for(#{hook_key})[:"#{hooked_method}"][:before]
+            before_hook_callback.call(self, *args) if before_hook_callback
+          BEFORE_HOOK_CALL
+
+          after_hook_call = <<-AFTER_HOOK_CALL
+            after_hook_callback = Peeping::Peep.hooked_instance_methods_for(#{hook_key})[:"#{hooked_method}"][:after]
+            after_hook_callback.call(self, proxied_result) if after_hook_callback
+          AFTER_HOOK_CALL
+
           class_eval_call = Proc.new do
             eval <<-REDEF
               alias :"#{hooked_method_name}" :"#{hooked_method}"
@@ -90,16 +92,33 @@ module Peeping
       end
 
       # Removes hook instance methods as well as returns the hooked methods to their original definition
-      def unhook_instances!(klass)
-        klass.class_eval do
-          instance_methods.grep(/^#{CLASS_HOOK_METHOD_PREFIX}/).each do |proxied_method|
-            proxied_method =~ (/^#{CLASS_HOOK_METHOD_PREFIX}(.*)$/)
-            original = $1
-            eval "alias #{original} #{proxied_method}"
-            eval "undef #{proxied_method}"
+      def unhook_instances!(klass, methods = :all, hooks = :all)
+        methods = (methods == :all) ? INSTANCE_METHOD_HOOKS[klass].keys : (methods.is_a?(Symbol) ? [methods] : methods)
+        raise ArgumentError("Valid arguments: :before, :after or :all") unless [:before, :after, :all].include?(hooks)
+
+        # Validate all methods exist before doing anything
+        methods.each do |method|
+          raise UndefinedHookException.new("No hook defined for instance method #{method})") unless INSTANCE_METHOD_HOOKS[klass][method]
+        end
+
+        methods.each do |method|
+          if hooks == :all
+            klass.class_eval <<-REDEF_OLD_METHOD
+              alias :"#{method}" :"#{INSTANCE_HOOK_METHOD_PREFIX}#{method}"
+              undef :"#{INSTANCE_HOOK_METHOD_PREFIX}#{method}"
+            REDEF_OLD_METHOD
+            INSTANCE_METHOD_HOOKS[klass].delete(method)
+          else
+            unless INSTANCE_METHOD_HOOKS[klass][method][hooks]
+              raise UndefinedHookException.new("No hook defined for instance method #{method}) at #{hooks.inspect}")
+            end
+            INSTANCE_METHOD_HOOKS[klass][method].delete(hooks)
+            INSTANCE_METHOD_HOOKS[klass].delete(method) if INSTANCE_METHOD_HOOKS[klass][method].empty?
           end
         end
-        INSTANCE_METHOD_HOOKS.delete(klass)
+
+        INSTANCE_METHOD_HOOKS.delete(klass) if methods == :all or (INSTANCE_METHOD_HOOKS[klass] || {}).empty?
+
       end
 
       def clear_all_instance_hooks!
