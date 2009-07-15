@@ -59,16 +59,17 @@ produces output:
 
 ## Tests
 
-The library comes with its rspec test suite, located in folder _tests_ 
+The library comes with its rspec test suite, located in folder _spec_
 
 ## Updates
 
+15 Jul 09 - Finished hook behavior specification. Version 1.0.1 released
+
 ## TODO
 
-- Add option to eval in the context of the caller with instance_exec
-- Selective remove for existing hooks
-- Add option to either replace or wrap singleton method hooks when instance method hooks are already defined
-- Accept options for wrapping, replacing or adding hooks at custom positions in the bubble chain
-- Gem packaging
+( Several previously marked TODO's are not anymore. Peeping it's not aimed at being a full framework )
+
+- Refactor classes (lot of ugly things there)
+- Add option to override ot keep instance hooks when defining singleton hooks
 
   [1]: http://rdoc.info/projects/chubas/peeping
