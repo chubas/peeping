@@ -68,7 +68,7 @@ module Peeping
           hook_key = 'self'
           before_hook_call = <<-BEFORE_HOOK_CALL
 
-            before_hook_callback = Peeping::Peep.hooked_singleton_methods_for(#{hook_key})[:"#{hooked_method}"][:before]
+            before_hook_callback = ((Peeping::Peep.hooked_singleton_methods_for(#{hook_key})||{})[:"#{hooked_method}"] || {})[:before]
             instance_before_hook_callback = ((Peeping::Peep.hooked_instance_methods_for(self.class) || {})[:"#{hooked_method}"] || {})[:before]
 
             before_hook_callback ||= instance_before_hook_callback                      
@@ -76,7 +76,7 @@ module Peeping
           BEFORE_HOOK_CALL
 
           after_hook_call = <<-AFTER_HOOK_CALL
-            after_hook_callback = Peeping::Peep.hooked_singleton_methods_for(#{hook_key})[:"#{hooked_method}"][:after]
+            after_hook_callback = ((Peeping::Peep.hooked_singleton_methods_for(#{hook_key})||{})[:"#{hooked_method}"] || {})[:after]
             instance_after_hook_callback = ((Peeping::Peep.hooked_instance_methods_for(self.class) || {})[:"#{hooked_method}"] || {})[:after]
 
             after_hook_callback ||= instance_after_hook_callback  
@@ -119,12 +119,10 @@ module Peeping
 
         methods.each do |method|
           if hooks == :all
-            x = <<-REDEF_OLD_METHOD
+            object.metaclass.class_eval <<-REDEF_OLD_METHOD
               alias :"#{method}" :"#{SINGLETON_HOOK_METHOD_PREFIX}#{method}"
               undef :"#{SINGLETON_HOOK_METHOD_PREFIX}#{method}"
             REDEF_OLD_METHOD
-            puts x
-            object.metaclass.class_eval x
             SINGLETON_METHOD_HOOKS[object].delete(method)
           else
             unless SINGLETON_METHOD_HOOKS[object][method][hooks]

@@ -165,8 +165,26 @@ describe Peep, "when adding and removing hooks" do
 
     Peep.unhook_object!(scooby, :lick_owner, :before)
     scooby.lick_owner
-    [before_instance_counter, after_instance_counter, before_object_counter, after_object_counter].each{|e| puts "-- #{e}"}
     counters_should_be[2, 1, 1, 2]
+    lassie.lick_owner
+    counters_should_be[3, 2, 1, 2]
+
+    Peep.unhook_instances!(Dog, :lick_owner, :after)
+    scooby.lick_owner
+    counters_should_be[4, 2, 1, 3]
+    lassie.lick_owner
+    counters_should_be[5, 2, 1, 3]
+
+    Peep.unhook_object!(scooby, :lick_owner, :after)
+    scooby.lick_owner
+    counters_should_be[6, 2, 1, 3]
+    lassie.lick_owner
+    counters_should_be[7, 2, 1, 3]
+
+    Peep.unhook_instances!(Dog, :lick_owner)
+    scooby.lick_owner
+    lassie.lick_owner
+    counters_should_be[7, 2, 1, 3]
   end
 
 end
