@@ -63,7 +63,7 @@ The library comes with its rspec test suite, located in folder _spec_
 
 ## Updates
 
-15 Jul 09 - Finished hook behavior specification. Version 1.0.1 released
+15 Jul 09 - Finished hook behavior specification. Version 1.1.0 released
 
 ## TODO
 
